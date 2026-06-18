@@ -93,6 +93,4 @@ app.post("/api/otp/verify", (req, res) => {
   return res.status(200).json({ success: true, message: "OTP verified successfully." });
 });
 
-app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
-
 app.listen(PORT, () => console.log(`🚀 OTP server running on port ${PORT}`));
