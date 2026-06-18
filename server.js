@@ -9,12 +9,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// ── OTP Store ────────────────────────────────────────────────────────────────
 const otpStore = new Map();
 const OTP_EXPIRY_MS = (parseInt(process.env.OTP_EXPIRY_MINUTES) || 10) * 60 * 1000;
 const MAX_ATTEMPTS = 5;
 
-// ── Email Transport ──────────────────────────────────────────────────────────
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || "smtp.gmail.com",
   port: parseInt(process.env.EMAIL_PORT) || 587,
@@ -25,7 +23,6 @@ const transporter = nodemailer.createTransport({
   },
 });
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
 function generateOtp(length = parseInt(process.env.OTP_LENGTH) || 6) {
   const max = Math.pow(10, length);
   const min = Math.pow(10, length - 1);
@@ -36,7 +33,6 @@ function isValidEmail(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-// ── Routes ───────────────────────────────────────────────────────────────────
 app.get("/health", (_req, res) => res.json({ status: "ok" }));
 
 app.post("/api/otp/send", async (req, res) => {
@@ -45,34 +41,29 @@ app.post("/api/otp/send", async (req, res) => {
     if (!email || !isValidEmail(email)) {
       return res.status(400).json({ success: false, message: "Valid email is required." });
     }
-
     const otp = generateOtp();
     otpStore.set(email.toLowerCase(), {
       otp,
       expiresAt: Date.now() + OTP_EXPIRY_MS,
       attempts: 0,
     });
-
     await transporter.sendMail({
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
       to: email,
       subject: "Your OTP Code",
-      html: `
-        <div style="font-family:sans-serif;max-width:480px;margin:auto;padding:32px;border:1px solid #e5e7eb;border-radius:8px;">
-          <h2 style="color:#111827;">Your One-Time Password</h2>
-          <p style="color:#6b7280;">Expires in <strong>${process.env.OTP_EXPIRY_MINUTES || 10} minute(s)</strong>.</p>
-          <div style="font-size:36px;font-weight:700;letter-spacing:8px;text-align:center;
-                      padding:24px;color:#4f46e5;border:2px dashed #e0e7ff;border-radius:6px;margin:24px 0;">
-            ${otp}
-          </div>
-          <p style="color:#ef4444;font-size:13px;">Never share this code with anyone.</p>
-        </div>`,
+      html: `<div style="font-family:sans-serif;padding:32px;">
+        <h2>Your One-Time Password</h2>
+        <div style="font-size:36px;font-weight:700;letter-spacing:8px;text-align:center;
+                    padding:24px;color:#4f46e5;border:2px dashed #e0e7ff;border-radius:6px;">
+          ${otp}
+        </div>
+        <p>Expires in ${process.env.OTP_EXPIRY_MINUTES || 10} minute(s). Never share this.</p>
+      </div>`,
     });
-
     return res.status(200).json({ success: true, message: `OTP sent to ${email}.` });
   } catch (err) {
     console.error("[Send OTP Error]", err.message);
-    return res.status(500).json({ success: false, message: "Failed to send OTP." });
+    return res.status(500).json({ success: false, message: "Failed to send OTP: " + err.message });
   }
 });
 
@@ -81,10 +72,8 @@ app.post("/api/otp/verify", (req, res) => {
   if (!email || !otp) {
     return res.status(400).json({ success: false, message: "Email and OTP are required." });
   }
-
   const key = email.toLowerCase();
   const record = otpStore.get(key);
-
   if (!record) {
     return res.status(400).json({ success: false, message: "No OTP found. Please request a new one." });
   }
@@ -100,12 +89,10 @@ app.post("/api/otp/verify", (req, res) => {
     record.attempts += 1;
     return res.status(400).json({ success: false, message: `Invalid OTP. ${MAX_ATTEMPTS - record.attempts} attempt(s) remaining.` });
   }
-
   otpStore.delete(key);
   return res.status(200).json({ success: true, message: "OTP verified successfully." });
 });
 
-// ── 404 ──────────────────────────────────────────────────────────────────────
 app.use((_req, res) => res.status(404).json({ success: false, message: "Route not found" }));
 
 app.listen(PORT, () => console.log(`🚀 OTP server running on port ${PORT}`));
